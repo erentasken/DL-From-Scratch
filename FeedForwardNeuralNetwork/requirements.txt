@@ -1,0 +1,12 @@
+cycler
+joblib
+kiwisolver
+matplotlib
+numpy==1.26.4
+pyparsing
+python-dateutil
+scikit-learn
+scipy
+six
+scikit-image
+tabulate
