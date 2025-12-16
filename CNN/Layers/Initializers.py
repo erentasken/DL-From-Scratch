@@ -7,7 +7,6 @@ class Constant:
     def initialize(self, shape, fan_in=None, fan_out=None): # that'll for bias init.
         return np.full(shape, self.value)
 
-
 class UniformRandom:
     def initialize(self, shape, fan_in=None, fan_out=None):
         return np.random.rand(*shape)  # values in [0,1)
