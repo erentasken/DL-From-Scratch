@@ -2,11 +2,11 @@
 
 A collection of deep learning implementations built from scratch using NumPy, including Convolutional Neural Networks (CNN), Feed-Forward Neural Networks, and Recurrent Neural Networks with regularization techniques.
 
-## 📚 Project Overview
+## Project Overview
 
 This repository contains implementations of various neural network architectures and deep learning concepts, built as educational exercises. Each component is implemented from scratch to provide a deep understanding of the underlying mathematics and algorithms.
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 .
@@ -47,7 +47,7 @@ This repository contains implementations of various neural network architectures
 └── playground.ipynb                  # Experimental notebook
 ```
 
-## 🚀 Features
+## Features
 
 ### CNN Implementation
 - **Convolutional Layers**: Forward and backward propagation with stride and padding support
@@ -76,7 +76,7 @@ This repository contains implementations of various neural network architectures
 - Array operations and broadcasting
 - Comprehensive test suite
 
-## 📋 Requirements
+## Requirements
 
 ```
 numpy==1.26.4
@@ -87,7 +87,7 @@ scikit-image
 tabulate
 ```
 
-## 🔧 Installation
+## Installation
 
 1. Clone the repository:
 ```bash
@@ -106,7 +106,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 💻 Usage
+## Usage
 
 ### CNN Example
 
@@ -153,7 +153,7 @@ nn.loss_layer = Loss.CrossEntropyLoss()
 nn.train(iterations=5000)
 ```
 
-## 🧪 Running Tests
+## Running Tests
 
 Each module includes comprehensive unit tests:
 
@@ -171,7 +171,7 @@ cd numpy
 python -m pytest NumpyTests.py
 ```
 
-## 📊 Project Highlights
+## Project Highlights
 
 - **From Scratch Implementation**: All components built without high-level frameworks (TensorFlow/PyTorch)
 - **Educational Focus**: Clear, readable code with detailed comments
@@ -179,7 +179,7 @@ python -m pytest NumpyTests.py
 - **Modular Design**: Easily extensible architecture
 - **Mathematical Rigor**: Proper implementation of gradients and optimization algorithms
 
-## 🎯 Learning Objectives
+## Learning Objectives
 
 This project demonstrates understanding of:
 - Neural network architectures and forward/backward propagation
@@ -191,7 +191,7 @@ This project demonstrates understanding of:
 - NumPy broadcasting and vectorization
 - Software engineering best practices for ML projects
 
-## 🤝 Contributing
+## Contributing
 
 This is an educational project, but suggestions and improvements are welcome! Feel free to:
 - Report bugs
@@ -199,21 +199,21 @@ This is an educational project, but suggestions and improvements are welcome! Fe
 - Submit pull requests
 - Improve documentation
 
-## 📝 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## 👤 Author
+## Author
 
 **Eren**
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built as part of a Deep Learning course curriculum
 - Inspired by various deep learning textbooks and papers
 - Test cases provided by course instructors
 
-## 📚 Resources
+## Resources
 
 - [Deep Learning Book by Ian Goodfellow](https://www.deeplearningbook.org/)
 - [CS231n: Convolutional Neural Networks for Visual Recognition](http://cs231n.stanford.edu/)
@@ -221,4 +221,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-⭐ If you find this repository helpful, please consider giving it a star!
+
