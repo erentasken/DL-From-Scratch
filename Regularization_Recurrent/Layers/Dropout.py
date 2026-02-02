@@ -21,7 +21,7 @@ class Dropout(Base.Base):
             # During training: inverted dropout
             # Create mask: 1 with probability p, 0 with probability (1-p)
             self.mask = np.random.binomial(1, self.probability, input_tensor.shape)
-            
+
             # Apply mask and scale by 1/p, so expected value remains the same ( compensation for dropped units )
             output = input_tensor * self.mask / self.probability
             return output

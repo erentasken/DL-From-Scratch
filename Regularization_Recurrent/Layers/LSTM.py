@@ -1,66 +1,48 @@
+import numpy as np
 from .Base import Base
 from .FullyConnected import FullyConnected
-import numpy as np
-
+from .Sigmoid import Sigmoid
 class LSTM(Base):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
-        self.trainable = True
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-
-        # Hidden and cell states for the previous sequence
+        self.input_size, self.hidden_size, self.output_size = input_size, hidden_size, output_size
         self.hidden_state = np.zeros((1, hidden_size))
         self.cell_state = np.zeros((1, hidden_size))
-
-        # Memorize flag for stateful sequences
         self._memorize = False
-
-        # Optimizer
         self._optimizer = None
+        self.trainable = True
 
-        # Fully connected layers for gates: input, forget, output, candidate
+        self._sigmoid = Sigmoid().forward
+
+        # Fully connected layers for gates and output
         self.fc_i = FullyConnected(input_size + hidden_size, hidden_size)
         self.fc_f = FullyConnected(input_size + hidden_size, hidden_size)
         self.fc_o = FullyConnected(input_size + hidden_size, hidden_size)
         self.fc_g = FullyConnected(input_size + hidden_size, hidden_size)
-
-        # Fully connected layer for output
         self.fc_output = FullyConnected(hidden_size, output_size)
 
-        # Storage for forward/backward
-        self.input_tensor = None
-        self.hiddens = []         # h_t
-        self.cells = []           # c_t
-        self.gates = []           # stores i, f, o, g pre-activations
-        self.fc_inputs = []       # concatenated x_t and h_{t-1} per timestep
-        self.fc_output_inputs = []
+        # Stored states for BPTT
+        self.hiddens, self.cells, self.gates = [], [], []
+        self.fc_inputs, self.fc_output_inputs = [], []
 
-    # -----------------------------
-    # Properties
-    # -----------------------------
     @property
-    def memorize(self):
-        return self._memorize
-
+    def memorize(self): return self._memorize
     @memorize.setter
-    def memorize(self, value):
-        self._memorize = bool(value)
+    def memorize(self, val): self._memorize = bool(val)
 
     @property
-    def optimizer(self):
-        return self._optimizer
-
+    def optimizer(self): return self._optimizer
     @optimizer.setter
     def optimizer(self, opt):
         self._optimizer = opt
-        # Decouple FC layers from optimizer
-        self.fc_i.optimizer = None
-        self.fc_f.optimizer = None
-        self.fc_o.optimizer = None
-        self.fc_g.optimizer = None
-        self.fc_output.optimizer = None
+        for fc in [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output]:
+            fc.optimizer = None
+
+    def initialize(self, weight_init, bias_init):
+        for fc in [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output]:
+            fc.initialize(weight_init, bias_init)
+
+
 
     @property
     def weights(self):
@@ -108,201 +90,83 @@ class LSTM(Base):
         self.fc_o.gradient_weights = o_grad
         self.fc_g.gradient_weights = g_grad
 
-    # -----------------------------
-    # Initialization
-    # -----------------------------
-    def initialize(self, weight_initializer, bias_initializer):
-        for fc in [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output]:
-            fc.initialize(weight_initializer, bias_initializer)
+    def forward(self, x):
+        time_steps = x.shape[0]
+        h_t = self.hidden_state if self._memorize else np.zeros((1, self.hidden_size))
+        c_t = self.cell_state if self._memorize else np.zeros((1, self.hidden_size))
 
-    # -----------------------------
-    # Forward pass
-    # -----------------------------
-    def forward(self, input_tensor):
-        """
-        Forward pass through LSTM.
-        input_tensor shape: (time_steps, input_size)
-        Returns: (time_steps, output_size)
-        """
-        time_steps = input_tensor.shape[0]
-
-        # Initialize hidden/cell states
-        if self._memorize:
-            h_t = self.hidden_state
-            c_t = self.cell_state
-        else:
-            h_t = np.zeros((1, self.hidden_size))
-            c_t = np.zeros((1, self.hidden_size))
-
-        # Clear stored states
-        self.input_tensor = input_tensor
-        self.hiddens.clear()
-        self.cells.clear()
-        self.gates.clear()
-        self.fc_inputs.clear()
-        self.fc_output_inputs.clear()
-
+        self.hiddens.clear(); self.cells.clear()
+        self.gates.clear(); self.fc_inputs.clear(); self.fc_output_inputs.clear()
         outputs = []
 
         for t in range(time_steps):
-            x_t = input_tensor[t:t+1, :]  # (1, input_size)
-            combined = np.hstack((x_t, h_t))  # (1, input + hidden)
-            # store the input with bias for FC backward (batch, input+hidden+1)
-            combined_with_bias = np.hstack((combined, np.ones((combined.shape[0], 1))))
-            self.fc_inputs.append(combined_with_bias.copy())
-
-            # Compute gates (FC.forward will also set their own input_tensor)
-            i_t = self._sigmoid(self.fc_i.forward(combined))
-            f_t = self._sigmoid(self.fc_f.forward(combined))
-            o_t = self._sigmoid(self.fc_o.forward(combined))
-            g_t = np.tanh(self.fc_g.forward(combined))
+            x_t = x[t:t+1]
+            combined = np.hstack((x_t, h_t))
+            self.fc_inputs.append(np.hstack((combined, np.ones((1,1)))).copy())
+            
+            i_t, f_t, o_t, g_t = (self._sigmoid(self.fc_i.forward(combined)),
+                                  self._sigmoid(self.fc_f.forward(combined)),
+                                  self._sigmoid(self.fc_o.forward(combined)),
+                                  np.tanh(self.fc_g.forward(combined)))
             self.gates.append((i_t, f_t, o_t, g_t))
 
-            # Update cell and hidden state
             c_t = f_t * c_t + i_t * g_t
             h_t = o_t * np.tanh(c_t)
-
             self.cells.append(c_t.copy())
             self.hiddens.append(h_t.copy())
 
-            # Output layer
             y_t = self.fc_output.forward(h_t)
-            # store the FC input tensor (including bias) for backward
             self.fc_output_inputs.append(self.fc_output.input_tensor.copy())
             outputs.append(y_t)
 
-        # Store last hidden/cell state for memorization
-        if self._memorize:
-            self.hidden_state = h_t
-            self.cell_state = c_t
-
+        if self._memorize: self.hidden_state, self.cell_state = h_t, c_t
         return np.vstack(outputs)
 
     def backward(self, error_tensor):
-        """
-        Backpropagation through time for LSTM.
-        error_tensor shape: (time_steps, output_size)
-        Returns: error tensor for previous layer (time_steps, input_size)
-        """
         time_steps = error_tensor.shape[0]
         error_input = np.zeros((time_steps, self.input_size))
-
-        dh_next = np.zeros((1, self.hidden_size))
-        dc_next = np.zeros((1, self.hidden_size))
-
-        # Initialize accumulated gradients with correct shapes (use weights shapes)
-        accumulated_grads = {
-            'i': np.zeros_like(self.fc_i.weights),
-            'f': np.zeros_like(self.fc_f.weights),
-            'o': np.zeros_like(self.fc_o.weights),
-            'g': np.zeros_like(self.fc_g.weights),
-            'out': np.zeros_like(self.fc_output.weights)
-        }
+        dh_next, dc_next = np.zeros((1, self.hidden_size)), np.zeros((1, self.hidden_size))
+        accumulated_grads = {k: np.zeros_like(fc.weights) for k, fc in
+                             zip(['i','f','o','g','out'],
+                                 [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output])}
 
         for t in reversed(range(time_steps)):
-            dy = error_tensor[t:t+1, :]
-
-            # ---------------- Output layer backward ----------------
-            # Set the input tensor that was used in forward pass
+            dy = error_tensor[t:t+1]
             self.fc_output.input_tensor = self.fc_output_inputs[t]
-            
-            # Perform backward pass
             dh = self.fc_output.backward(dy)
-            
-            # Accumulate gradients
             accumulated_grads['out'] += self.fc_output.gradient_weights
+            dh += dh_next
 
-            dh += dh_next  # add gradient from next timestep
-
-            # ---------------- LSTM gates ----------------
             i_t, f_t, o_t, g_t = self.gates[t]
-            c_t = self.cells[t]
-            c_prev = self.cells[t-1] if t > 0 else np.zeros((1, self.hidden_size))
+            c_t = self.cells[t]; c_prev = self.cells[t-1] if t>0 else np.zeros((1,self.hidden_size))
 
-            # Backprop through cell
-            do = dh * np.tanh(c_t)
-            dc = dh * o_t * (1 - np.tanh(c_t)**2) + dc_next
-            di = dc * g_t
-            dg = dc * i_t
-            df = dc * c_prev
+            do = dh * np.tanh(c_t); dc = dh * o_t * (1 - np.tanh(c_t)**2) + dc_next
+            di, dg, df = dc * g_t, dc * i_t, dc * c_prev
             dc_next = dc * f_t
 
-            # Apply gate activation derivatives
-            di *= i_t * (1 - i_t)
-            df *= f_t * (1 - f_t)
-            do *= o_t * (1 - o_t)
-            dg *= 1 - g_t ** 2
+            di *= i_t * (1-i_t); df *= f_t * (1-f_t); do *= o_t * (1-o_t); dg *= 1 - g_t**2
 
-            # ---------------- Backprop through FC layers for gates ----------------
-            # Input gate
-            self.fc_i.input_tensor = self.fc_inputs[t]
-            d_comb_i = self.fc_i.backward(di)
-            accumulated_grads['i'] += self.fc_i.gradient_weights
+            # Gate FC backward
+            for gate, d_gate in zip(['i','f','o','g'], [di, df, do, dg]):
+                fc = getattr(self, f'fc_{gate}')
+                fc.input_tensor = self.fc_inputs[t]
+                d_comb = fc.backward(d_gate)
+                accumulated_grads[gate] += fc.gradient_weights
+                if gate=='i': dx, dh_next_partial = d_comb[:, :self.input_size], d_comb[:, self.input_size:]
+                else:
+                    dx += d_comb[:, :self.input_size]; dh_next_partial += d_comb[:, self.input_size:]
+            dh_next = dh_next_partial
+            error_input[t:t+1] = dx
 
-            # Forget gate
-            self.fc_f.input_tensor = self.fc_inputs[t]
-            d_comb_f = self.fc_f.backward(df)
-            accumulated_grads['f'] += self.fc_f.gradient_weights
-
-            # Output gate
-            self.fc_o.input_tensor = self.fc_inputs[t]
-            d_comb_o = self.fc_o.backward(do)
-            accumulated_grads['o'] += self.fc_o.gradient_weights
-
-            # Candidate gate
-            self.fc_g.input_tensor = self.fc_inputs[t]
-            d_comb_g = self.fc_g.backward(dg)
-            accumulated_grads['g'] += self.fc_g.gradient_weights
-
-            # ---------------- Gradients w.r.t input ----------------
-            # Sum gradients from all gates for input x
-            dx = d_comb_i[:, :self.input_size] + d_comb_f[:, :self.input_size] + \
-                d_comb_o[:, :self.input_size] + d_comb_g[:, :self.input_size]
-            
-            # Sum gradients from all gates for hidden state
-            dh_next = d_comb_i[:, self.input_size:] + d_comb_f[:, self.input_size:] + \
-                    d_comb_o[:, self.input_size:] + d_comb_g[:, self.input_size:]
-
-            error_input[t:t+1, :] = dx
-
-        # ---------------- Set accumulated gradients ----------------
+        # Set accumulated gradients
         self.fc_i.gradient_weights = accumulated_grads['i']
         self.fc_f.gradient_weights = accumulated_grads['f']
         self.fc_o.gradient_weights = accumulated_grads['o']
         self.fc_g.gradient_weights = accumulated_grads['g']
         self.fc_output.gradient_weights = accumulated_grads['out']
 
-        # ---------------- Apply optimizer updates ----------------
-        if self._optimizer is not None:
-            # Update weights for each FC layer
-            self.fc_i.weights = self._optimizer.calculate_update(self.fc_i.weights, self.fc_i.gradient_weights)
-            self.fc_f.weights = self._optimizer.calculate_update(self.fc_f.weights, self.fc_f.gradient_weights)
-            self.fc_o.weights = self._optimizer.calculate_update(self.fc_o.weights, self.fc_o.gradient_weights)
-            self.fc_g.weights = self._optimizer.calculate_update(self.fc_g.weights, self.fc_g.gradient_weights)
-            self.fc_output.weights = self._optimizer.calculate_update(self.fc_output.weights, self.fc_output.gradient_weights)
+        if self._optimizer:
+            for fc in [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output]:
+                fc.weights = self._optimizer.calculate_update(fc.weights, fc.gradient_weights)
 
         return error_input
-
-
-    # -----------------------------
-    # Regularization
-    # -----------------------------
-    def calculate_regularization_loss(self):
-        if self._optimizer is not None and hasattr(self._optimizer, 'regularizer') \
-           and self._optimizer.regularizer is not None:
-            reg = self._optimizer.regularizer
-            return sum([reg.norm(fc.weights) for fc in 
-                        [self.fc_i, self.fc_f, self.fc_o, self.fc_g, self.fc_output]])
-        return 0.0
-
-    # -----------------------------
-    # Utility
-    # -----------------------------
-    @staticmethod
-    def _sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-    
-    def reset_state(self):
-        """Reset hidden and cell states to zeros"""
-        self.hidden_state = np.zeros((1, self.hidden_size))
-        self.cell_state = np.zeros((1, self.hidden_size))
